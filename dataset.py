@@ -24,7 +24,7 @@ class SegmentDataset(data.Dataset):
 
         # self.length = len(self.images)
         if mode=='train':
-            self.length = 100
+            self.length = 400
         elif mode=='test':
             self.length = len(self.images)
         elif mode=='val':

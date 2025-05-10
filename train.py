@@ -16,6 +16,6 @@ model = Segmentator('cuda:3')
 
 model.train(path_to_train=path_to_train,
             path_to_val=path_to_val,
-            batch_size=4,
+            batch_size=5,
             lr=0.0005,
-            num_epoch=2)
+            num_epoch=50)

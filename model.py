@@ -157,7 +157,7 @@ class Segmentator():
             train_metrics = self.run_epoch(count_epoch, dataloader_train, self.optimizer, loss_1, loss_2, is_train=True)
             val_metrics = self.run_epoch(count_epoch, dataloader_val, None, loss_1, loss_2, is_train=False)
 
-            self.scheduler.step(val_metrics['Val_Loss'])
+            self.scheduler.step() #val_metrics['Val_Loss'])
             current_lr = self.optimizer.param_groups[0]['lr']
             self.writer.add_scalar('Learning Rate', current_lr, count_epoch)
 
@@ -168,7 +168,7 @@ class Segmentator():
                 self.__save_model("best")
                 
             print(
-                # f"Lr = {round(current_lr, 4)} | "
+                f"Lr = {round(current_lr, 4)} | "
                 f"Train Loss: {train_metrics['Train_Loss']:.4f} | "
                 f"Train IoU: {train_metrics['Train_IoU']:.4f} | "
                 f"Val Loss: {val_metrics['Val_Loss']:.4f} | "

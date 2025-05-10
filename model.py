@@ -112,10 +112,12 @@ class SoftDiceLoss(nn.Module):
 class Segmentator():
     def __init__(self, device='cpu'):
         self.device = device
-        self.model = UNetModel().to(self.device)
-
-        # model = torch.nn.DataParallel(model, device_ids=[1, 2])
-        # model = model.cuda()
+        self.model = UNetModel(in_channels=3, num_classes=1).to(self.device)
+        # self.model = torch.compile(
+        #     self.model,
+        #     mode="max-autotune",
+        #     fullgraph=True
+        # )
 
         self.writer = None 
 
@@ -123,7 +125,7 @@ class Segmentator():
             self.num_workers = 0
             self.pin_memory = False
         else:
-            self.num_workers = 4
+            self.num_workers = 6
             self.pin_memory = True
 
     def train(self, path_to_train: str, path_to_val: str, num_epoch=100, batch_size=64, lr=0.001):
@@ -138,13 +140,15 @@ class Segmentator():
         dataloader_val = data.DataLoader(segment_val, batch_size=batch_size, shuffle=False,
                                           num_workers=self.num_workers, pin_memory=self.pin_memory)
 
-        self.model = UNetModel(in_channels=3, num_classes=1).to(self.device)
-
-        self.optimizer = optim.RMSprop(params=self.model.parameters(), lr=lr, weight_decay=1e-8, momentum=0.9)
+        self.optimizer = optim.AdamW(params=self.model.parameters(), lr=lr, weight_decay=1e-4)
         loss_1 = nn.BCEWithLogitsLoss()
         loss_2 = SoftDiceLoss()
 
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=num_epoch,
+            eta_min=1e-6
+        )
 
         self.model.train()
         best_val_iou = 0.0
@@ -153,7 +157,9 @@ class Segmentator():
             train_metrics = self.run_epoch(count_epoch, dataloader_train, self.optimizer, loss_1, loss_2, is_train=True)
             val_metrics = self.run_epoch(count_epoch, dataloader_val, None, loss_1, loss_2, is_train=False)
 
-            self.scheduler.step(train_metrics['Train_Loss'])
+            self.scheduler.step(val_metrics['Val_Loss'])
+            current_lr = self.optimizer.param_groups[0]['lr']
+            self.writer.add_scalar('Learning Rate', current_lr, count_epoch)
 
             self.__log_metrics(train_metrics, val_metrics, count_epoch)
             self.__log_weights_and_grads(count_epoch)
@@ -162,7 +168,7 @@ class Segmentator():
                 self.__save_model("best")
                 
             print(
-                f"Lr = {self.scheduler.get_last_lr()} | "
+                # f"Lr = {round(current_lr, 4)} | "
                 f"Train Loss: {train_metrics['Train_Loss']:.4f} | "
                 f"Train IoU: {train_metrics['Train_IoU']:.4f} | "
                 f"Val Loss: {val_metrics['Val_Loss']:.4f} | "
@@ -231,13 +237,12 @@ class Segmentator():
     
     def __log_metrics(self, train_metrics, val_metrics, epoch):
         for metric, value in train_metrics.items():
-            self.writer.add_scalar(f'Loss/{metric.split("_")[0]}', value, epoch)
-        
+            self.writer.add_scalar(f'Train/{metric.split("_")[1]}', value, epoch)
+            self.writer.add_scalar(f'Train/{metric.split("_")[1]}', value, epoch)
+
         for metric, value in val_metrics.items():
-            if "Loss" in metric:
-                 self.writer.add_scalar(f'Loss/{metric.split("_")[0]}', value, epoch)
-            elif "IoU" in metric:
-                 self.writer.add_scalar(f'IoU/{metric.split("_")[0]}', value, epoch)
+            self.writer.add_scalar(f'Val/{metric.split("_")[1]}', value, epoch)
+            self.writer.add_scalar(f'Val/{metric.split("_")[1]}', value, epoch)
 
     def __log_weights_and_grads(self, epoch):
         for name, param in self.model.named_parameters():
@@ -258,7 +263,9 @@ class Segmentator():
         state = {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict()
         }
+
         torch.save(state, model_path)
 
     def load_model(self, path_to_checkpoint):
@@ -266,7 +273,7 @@ class Segmentator():
             print(f"Checkpoint file not found: {path_to_checkpoint}")
             return
 
-        checkpoint = torch.load(path_to_checkpoint, map_location=torch.device(self.device))
+        checkpoint = torch.load(path_to_checkpoint, map_location=torch.device(self.device), weights_only=True)
         
         self.model = UNetModel(in_channels=3, num_classes=1).to(self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
@@ -308,7 +315,7 @@ class Segmentator():
 
     def visualize_batch(self, x_batch, y_batch, preds_binary, save_path=None, num_examples=4):
         batch_size = min(x_batch.size(0), num_examples)
-        fig, axs = plt.subplots(batch_size, 3, figsize=(10, 3 * batch_size))
+        fig, axs = plt.subplots(batch_size, 3, figsize=(15, 3 * batch_size))
         if batch_size == 1:
             axs = [axs]
         for i in range(batch_size):

@@ -7,4 +7,4 @@ model = Segmentator('cuda:3')
 
 model.load_model(path_to_model)
 
-model.test(path_to_test)
+model.test(path_to_test, 4)

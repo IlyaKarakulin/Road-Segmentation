@@ -10,7 +10,7 @@ import torch
 class SegmentDataset(data.Dataset):
     def __init__(self, path, mode='train'):
         self.size = 1024
-        self.path_img = Path(path) # Path(os.path.join(path, 'images'))
+        self.path_img = Path(path)
         self.path_mask = Path(path + '_labels')
         IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'}
         
@@ -24,7 +24,7 @@ class SegmentDataset(data.Dataset):
 
         # self.length = len(self.images)
         if mode=='train':
-            self.length = 200
+            self.length = 100
         elif mode=='test':
             self.length = len(self.images)
         elif mode=='val':
